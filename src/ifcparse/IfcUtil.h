@@ -106,7 +106,6 @@ public:
 	inline void push(SHARED_PTR< IfcTemplatedEntityList<T> > t) { for ( typename T::it it = t->begin(); it != t->end(); ++it ) push(*it); }
 	inline it begin() { return ls.begin(); }
 	inline it end() { return ls.end(); }
-	inline T operator[] (int i) { return ls[i]; }
 	inline unsigned int Size() const { return (unsigned int) ls.size(); }
 	IfcEntities generalize() {
 		IfcEntities r (new IfcEntityList());
@@ -212,6 +211,7 @@ public:
 	/// Log a message to the output stream
 	static void Message(Severity type, const std::string& message, const IfcAbstractEntityPtr entity=0);
 	static void Status(const std::string& message, bool new_line=true);
+	static void ProgressBar(int progress);
 	static std::string GetLog();
 };
 

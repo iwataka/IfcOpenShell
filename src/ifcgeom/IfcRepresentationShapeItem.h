@@ -17,21 +17,36 @@
  *                                                                              *
  ********************************************************************************/
 
-#ifndef IFCEXCEPTION_H
-#define IFCEXCEPTION_H
+#ifndef IFCSHAPELIST_H
+#define IFCSHAPELIST_H
 
-#include <exception>
-#include <string>
+#include <gp_GTrsf.hxx>
+#include <TopoDS_Shape.hxx>
 
-namespace IfcParse {
-	class IfcException : public std::exception {
+#include "../ifcgeom/IfcGeomRenderStyles.h"
+
+namespace IfcGeom {	
+	class IfcRepresentationShapeItem {
 	private:
-		std::string error;
+		gp_GTrsf placement;
+		TopoDS_Shape shape;
+		const SurfaceStyle* style;
 	public:
-		IfcException(std::string e);
-		~IfcException () throw ();
-		const char* what() const throw();
+		IfcRepresentationShapeItem(const gp_GTrsf& placement, const TopoDS_Shape& shape, const SurfaceStyle* style)
+			: placement(placement), shape(shape), style(style) {}
+		IfcRepresentationShapeItem(const gp_GTrsf& placement, const TopoDS_Shape& shape)
+			: placement(placement), shape(shape), style(0) {}
+		IfcRepresentationShapeItem(const TopoDS_Shape& shape, const SurfaceStyle* style)
+			: shape(shape), style(style) {}
+		IfcRepresentationShapeItem(const TopoDS_Shape& shape)
+			: shape(shape), style(0) {}
+		void append(const gp_GTrsf& trsf) { placement.Multiply(trsf); }
+		void prepend(const gp_GTrsf& trsf) { placement.PreMultiply(trsf); }
+		const TopoDS_Shape& Shape() const { return shape; }
+		const gp_GTrsf& Placement() const { return placement; }
+		bool hasStyle() const { return style != 0; }
+		const SurfaceStyle& Style() const { return *style; }
 	};
+	typedef std::vector<IfcRepresentationShapeItem> IfcRepresentationShapeItems;
 }
-
 #endif

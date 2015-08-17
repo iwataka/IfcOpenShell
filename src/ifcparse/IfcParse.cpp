@@ -36,6 +36,30 @@
 
 using namespace IfcParse;
 
+// A static locale for the real number parser. strtod() is locale-dependent, causing issues 
+// in locales that have ',' as a decimal separator. Therefore the non standard _strtod_l() / 
+// strtod_l() is used and a reference to the "C" locale is obtained here. The alternative is 
+// to use std::istringstream::imbue(std::locale::classic()), but there are subtleties in 
+// parsing in MSVC2010 and it appears to be much slower. 
+#ifdef _MSC_VER
+static _locale_t locale = (_locale_t) 0;
+void init_locale() {
+	if (locale == (_locale_t) 0) {
+		locale = _create_locale(LC_NUMERIC, "C");
+	}
+}
+#else
+#ifdef __APPLE__
+#include <xlocale.h>
+#endif
+static locale_t locale = (locale_t) 0;
+void init_locale() {
+	if (locale == (locale_t) 0) {
+		locale = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0);
+	}
+}
+#endif
+
 // 
 // Opens the file, gets the filesize and reads a chunk in memory
 //
@@ -218,6 +242,40 @@ Tokens::~Tokens() {
 	delete decoder;
 }
 
+unsigned int Tokens::skipWhitespace() {
+	unsigned int n = 0;
+	while ( !stream->eof ) {
+		char c = stream->Peek();
+		if ( (c == ' ' || c == '\r' || c == '\n' || c == '\t' ) ) {
+			stream->Inc();
+			++n;
+		}
+		else break;
+	}
+	return n;
+}
+
+unsigned int Tokens::skipComment() {
+	char c = stream->Peek();
+	if (c != '/') return 0;
+	stream->Inc();
+	c = stream->Peek();
+	if (c != '*') {
+		stream->Seek(stream->Tell() - 1);
+		return 0;
+	}
+	unsigned int n = 2;
+	char p = 0;
+	while ( !stream->eof ) {
+		c = stream->Peek();
+		stream->Inc();
+		++ n;
+		if (c == '/' && p == '*') break;
+		p = c;
+	}
+	return n;
+}
+
 //
 // Returns the offset of the current Token and moves cursor to next
 //
@@ -225,23 +283,15 @@ Token Tokens::Next() {
 
 	if ( stream->eof ) return TokenPtr();
 
-	char c;
-
-	// Trim whitespace
-	while ( !stream->eof ) {
-		c = stream->Peek();
-		if ( (c == ' ' || c == '\r' || c == '\n' || c == '\t' ) ) stream->Inc();
-		else break;
-	}
-
+	while (skipWhitespace() || skipComment()) {}
+	
 	if ( stream->eof ) return TokenPtr();
 	unsigned int pos = stream->Tell();
 
-	bool inString = false;
-	bool inComment = false;
-
+	char c = stream->Peek();
+	
 	// If the cursor is at [()=,;$*] we know token consists of single char
-	if ( c == '(' || c == ')' || c == '=' || c == ',' || c == ';' || c == '$' || c == '*' ) {
+	if (c == '(' || c == ')' || c == '=' || c == ',' || c == ';' || c == '$' || c == '*') {
 		stream->Inc();
 		return TokenPtr(c);
 	}
@@ -253,18 +303,12 @@ Token Tokens::Next() {
 
 		// Read character and increment pointer if not starting a new token
 		char c = stream->Peek();
-		if ( len && (!inString || inComment) && (c == '(' || c == ')' || c == '=' || c == ',' || c == ';' ) ) break;
+		if ( len && (c == '(' || c == ')' || c == '=' || c == ',' || c == ';' || c == '/') ) break;
 		stream->Inc();
-
-		// Skip whitespace if not in comment or string
-		if ( !inComment && !inString && (c == ' ' || c == '\r' || c == '\n' || c == '\t' ) ) continue;
-
 		len ++;
 
-		// Keep track of whether cursor is inside a string or comment		
-		if ( inComment && p == '*' && c == '/' ) inComment = false;
-		else if ( !inString && !inComment && p == '/' && c == '*' ) inComment = true;
-		else if ( !inComment && c == '\'' ) decoder->dryRun();
+		// If a string is encountered defer processing to the IfcCharacterDecoder
+		if ( c == '\'' ) decoder->dryRun();
 
 		p = c;
 	}
@@ -280,20 +324,16 @@ std::string Tokens::TokenString(unsigned int offset) {
 	const bool was_eof = stream->eof;
 	unsigned int old_offset = stream->Tell();
 	stream->Seek(offset);
-	bool inString = false;
-	bool inComment = false;
 	std::string buffer;
 	buffer.reserve(128);
 	char p = 0;
 	while ( ! stream->eof ) {
 		char c = stream->Peek();
-		if ( buffer.size() && (!inString || inComment) && (c == '(' || c == ')' || c == '=' || c == ',' || c == ';' ) ) break;
+		if ( buffer.size() && (c == '(' || c == ')' || c == '=' || c == ',' || c == ';' || c == '/') ) break;
 		stream->Inc();
-		if ( !inComment && !inString && (c == ' ' || c == '\r' || c == '\n' || c == '\t' ) ) continue;
-		if ( !inComment ) buffer.push_back(c);
-		if ( inComment && p == '*' && c == '/' ) inComment = false;
-		else if ( !inString && !inComment && p == '/' && c == '*' ) inComment = true;
-		else if ( !inComment && c == '\'' ) return *decoder;
+		if ( c == ' ' || c == '\r' || c == '\n' || c == '\t' ) continue;
+		else if ( c == '\'' ) return *decoder;
+		else buffer.push_back(c);
 		p = c;
 	}
 	if ( was_eof ) stream->eof = true;
@@ -345,7 +385,15 @@ bool TokenFunc::asBool(const Token& t) {
 }
 double TokenFunc::asFloat(const Token& t) {
 	const std::string str = asString(t);
-	return (double) atof(str.c_str());
+	const char* start = str.c_str();
+	char* end;
+#ifdef _MSC_VER
+	double result = _strtod_l(start,&end,locale);
+#else
+	double result = strtod_l(start,&end,locale);
+#endif
+	if ( start == end ) throw IfcException("Token is not a real");
+	return result;
 }
 std::string TokenFunc::asString(const Token& t) {
 	if ( isOperator(t,'$') ) return "";
@@ -606,6 +654,8 @@ std::string Entity::toString(bool upper) {
 		Load(ids, true);
 	}
 	std::stringstream ss;
+	ss.imbue(std::locale::classic());
+	
 	std::string dt = datatype();
 	if ( upper ) {
 		for (std::string::iterator p = dt.begin(); p != dt.end(); ++p ) *p = toupper(*p);
@@ -673,6 +723,10 @@ bool IfcFile::Init(void* data, int len) {
 	return IfcFile::Init(new IfcSpfStream(data,len));
 }
 bool IfcFile::Init(IfcParse::IfcSpfStream* f) {
+	// Initialize a "C" locale for locale-independent
+	// number parsing. See comment above on line 41.
+	init_locale();
+
 	Ifc2x3::InitStringMap();
 	file = f;
 	if ( ! file->valid ) return false;
@@ -714,40 +768,45 @@ bool IfcFile::Init(IfcParse::IfcSpfStream* f) {
 					Logger::Message(Logger::LOG_ERROR,ex.what());
 				}
 			}
+
 			Ifc2x3::Type::Enum ty = entity->type();
 			do {
-				IfcEntities L = EntitiesByType(ty);
-				if ( L == 0 ) {
-					L = IfcEntities(new IfcEntityList());
-					bytype[ty] = L;
+				IfcEntities instances_by_type = EntitiesByType(ty);
+				if (!instances_by_type) {
+					instances_by_type = IfcEntities(new IfcEntityList());
+					bytype[ty] = instances_by_type;
 				}
-				L->push(entity);
+				instances_by_type->push(entity);
 				ty = Ifc2x3::Type::Parent(ty);
 			} while ( ty > -1 );
+
 			if ( byid.find(currentId) != byid.end() ) {
 				std::stringstream ss;
 				ss << "Overwriting entity with id " << currentId;
 				Logger::Message(Logger::LOG_WARNING,ss.str());
 			}
 			byid[currentId] = entity;
+
 			MaxId = (std::max)(MaxId,currentId);
 			currentId = 0;
 		} else {
 			try { token = tokens->Next(); }
 			catch (... ) { token = TokenPtr(); }
 		}
+
 		if ( ! (token.second || token.first) ) break;
+
 		if ( (previous.second || previous.first) && TokenFunc::isIdentifier(previous) ) {
 			int id = TokenFunc::asInt(previous);
 			if ( TokenFunc::isOperator(token,'=') ) {
 				currentId = id;
 			} else if (entity) {
-				IfcEntities L = EntitiesByReference(id);
-				if ( L == 0 ) {
-					L = IfcEntities(new IfcEntityList());
-					byref[id] = L;
+				IfcEntities instances_by_ref = EntitiesByReference(id);
+				if (!instances_by_ref) {
+					instances_by_ref = IfcEntities(new IfcEntityList());
+					byref[id] = instances_by_ref;
 				}
-				L->push(entity);
+				instances_by_ref->push(entity);
 			}
 		}
 		previous = token;
@@ -775,16 +834,18 @@ void IfcFile::AddEntity(IfcUtil::IfcSchemaEntity entity) {
 			Logger::Message(Logger::LOG_ERROR,ex.what());
 		}
 	}
+
 	Ifc2x3::Type::Enum ty = entity->type();
 	do {
-		IfcEntities L = EntitiesByType(ty);
-		if ( L == 0 ) {
-			L = IfcEntities(new IfcEntityList());
-			bytype[ty] = L;
+		IfcEntities instances_by_type = EntitiesByType(ty);
+		if (!instances_by_type) {
+			instances_by_type = IfcEntities(new IfcEntityList());
+			bytype[ty] = instances_by_type;
 		}
-		L->push(entity);
+		instances_by_type->push(entity);
 		ty = Ifc2x3::Type::Parent(ty);
 	} while ( ty > -1 );
+
 	int new_id = -1;
 	// For newly created entities ensure a valid ENTITY_INSTANCE_NAME is set
 	if ( entity->entity->isWritable() ) {

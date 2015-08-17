@@ -24,6 +24,7 @@
  ********************************************************************************/
 
 #include <cassert>
+#include <algorithm>
 
 #include <gp_Pnt.hxx>
 #include <gp_Vec.hxx>
@@ -86,7 +87,7 @@
 
 #include <BRepGProp_Face.hxx>
 
-#include <BRepMesh.hxx>
+#include <BRepMesh_IncrementalMesh.hxx>
 #include <BRepTools.hxx>
 
 #include <Poly_Triangulation.hxx>
@@ -125,15 +126,23 @@ bool IfcGeom::is_compound(const TopoDS_Shape& shape) {
 
 const TopoDS_Shape& IfcGeom::ensure_fit_for_subtraction(const TopoDS_Shape& shape, TopoDS_Shape& solid) {
 	const bool is_comp = IfcGeom::is_compound(shape);
-	if ( ! is_comp ) return shape;
-	IfcGeom::create_solid_from_compound(shape,solid);
+	if (!is_comp) {
+		return solid = shape;
+	}
+	IfcGeom::create_solid_from_compound(shape, solid);
+	
+	// If the SEW_SHELLS option had been set this precision had been applied
+	// at the end of the generic IfcGeom::convert_shape() call.
+	const double precision = IfcGeom::GetValue(GV_PRECISION);
+	IfcGeom::apply_tolerance(solid, precision);
+	
 	return solid;
 }
 
 bool IfcGeom::convert_openings(const Ifc2x3::IfcProduct::ptr entity, const Ifc2x3::IfcRelVoidsElement::list& openings, 
-							   const ShapeList& entity_shapes, const gp_Trsf& entity_trsf, ShapeList& cut_shapes) {
+							   const IfcRepresentationShapeItems& entity_shapes, const gp_Trsf& entity_trsf, IfcRepresentationShapeItems& cut_shapes) {
 	// Iterate over IfcOpeningElements
-	IfcGeom::ShapeList opening_shapes;
+	IfcGeom::IfcRepresentationShapeItems opening_shapes;
 	unsigned int last_size = 0;
 	for ( Ifc2x3::IfcRelVoidsElement::it it = openings->begin(); it != openings->end(); ++ it ) {
 		Ifc2x3::IfcRelVoidsElement::ptr v = *it;
@@ -156,17 +165,17 @@ bool IfcGeom::convert_openings(const Ifc2x3::IfcProduct::ptr entity, const Ifc2x
 
 			const unsigned int current_size = (const unsigned int) opening_shapes.size();
 			for ( unsigned int i = last_size; i < current_size; ++ i ) {
-				opening_shapes[i].first->PreMultiply(opening_trsf);
+				opening_shapes[i].prepend(opening_trsf);
 			}
 			last_size = current_size;
 		}
 	}
 
 	// Iterate over the shapes of the IfcProduct
-	for ( IfcGeom::ShapeList::const_iterator it3 = entity_shapes.begin(); it3 != entity_shapes.end(); ++ it3 ) {
+	for ( IfcGeom::IfcRepresentationShapeItems::const_iterator it3 = entity_shapes.begin(); it3 != entity_shapes.end(); ++ it3 ) {
 		TopoDS_Shape entity_shape_solid;
-		const TopoDS_Shape& entity_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(*(it3->second),entity_shape_solid);
-		const gp_GTrsf& entity_shape_gtrsf = *(it3->first);
+		const TopoDS_Shape& entity_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(it3->Shape(),entity_shape_solid);
+		const gp_GTrsf& entity_shape_gtrsf = it3->Placement();
 		TopoDS_Shape entity_shape;
 		if ( entity_shape_gtrsf.Form() == gp_Other ) {
 			Logger::Message(Logger::LOG_WARNING,"Applying non uniform transformation to:",entity->entity);
@@ -176,10 +185,10 @@ bool IfcGeom::convert_openings(const Ifc2x3::IfcProduct::ptr entity, const Ifc2x
 		}
 
 		// Iterate over the shapes of the IfcOpeningElements
-		for ( IfcGeom::ShapeList::const_iterator it4 = opening_shapes.begin(); it4 != opening_shapes.end(); ++ it4 ) {
+		for ( IfcGeom::IfcRepresentationShapeItems::const_iterator it4 = opening_shapes.begin(); it4 != opening_shapes.end(); ++ it4 ) {
 			TopoDS_Shape opening_shape_solid;
-			const TopoDS_Shape& opening_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(*(it4->second),opening_shape_solid);
-			const gp_GTrsf& opening_shape_gtrsf = *(it4->first);
+			const TopoDS_Shape& opening_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(it4->Shape(),opening_shape_solid);
+			const gp_GTrsf& opening_shape_gtrsf = it4->Placement();
 			if ( opening_shape_gtrsf.Form() == gp_Other ) {
 				Logger::Message(Logger::LOG_WARNING,"Applying non uniform transformation to opening of:",entity->entity);
 			}
@@ -218,19 +227,14 @@ bool IfcGeom::convert_openings(const Ifc2x3::IfcProduct::ptr entity, const Ifc2x
 			}
 
 		}
-		cut_shapes.push_back(IfcGeom::LocationShape(new gp_GTrsf(),new TopoDS_Shape(entity_shape)));
-	}
-
-	// Delete references to opening transformations, but keep shapes in the cache
-	for ( IfcGeom::ShapeList::const_iterator it5 = opening_shapes.begin(); it5 != opening_shapes.end(); ++ it5 ) {
-		delete it5->first;
+		cut_shapes.push_back(IfcGeom::IfcRepresentationShapeItem(entity_shape, &it3->Style()));
 	}
 
 	return true;
 }
 
 bool IfcGeom::convert_openings_fast(const Ifc2x3::IfcProduct::ptr entity, const Ifc2x3::IfcRelVoidsElement::list& openings, 
-							   const ShapeList& entity_shapes, const gp_Trsf& entity_trsf, ShapeList& cut_shapes) {
+							   const IfcRepresentationShapeItems& entity_shapes, const gp_Trsf& entity_trsf, IfcRepresentationShapeItems& cut_shapes) {
 	
 	// Create a compound of all opening shapes in order to speed up the boolean operations
 	TopoDS_Compound opening_compound;
@@ -252,32 +256,29 @@ bool IfcGeom::convert_openings_fast(const Ifc2x3::IfcProduct::ptr entity, const 
 			Ifc2x3::IfcProductRepresentation::ptr prodrep = fes->Representation();
 			Ifc2x3::IfcRepresentation::list reps = prodrep->Representations();
 
-			IfcGeom::ShapeList opening_shapes;
+			IfcGeom::IfcRepresentationShapeItems opening_shapes;
 						
 			for ( Ifc2x3::IfcRepresentation::it it2 = reps->begin(); it2 != reps->end(); ++ it2 ) {
 				IfcGeom::convert_shapes(*it2,opening_shapes);
 			}
 
 			for ( unsigned int i = 0; i < opening_shapes.size(); ++ i ) {
-				gp_GTrsf& gtrsf = *opening_shapes[i].first;
+				gp_GTrsf gtrsf = opening_shapes[i].Placement();
 				gtrsf.PreMultiply(opening_trsf);
 				const TopoDS_Shape& opening_shape = gtrsf.Form() == gp_Other
-					? BRepBuilderAPI_GTransform(*opening_shapes[i].second,gtrsf,true).Shape()
-					: (*opening_shapes[i].second).Moved(gtrsf.Trsf());
+					? BRepBuilderAPI_GTransform(opening_shapes[i].Shape(),gtrsf,true).Shape()
+					: (opening_shapes[i].Shape()).Moved(gtrsf.Trsf());
 				builder.Add(opening_compound,opening_shape);
 			}
 
-			for ( IfcGeom::ShapeList::const_iterator it5 = opening_shapes.begin(); it5 != opening_shapes.end(); ++ it5 ) {
-				delete it5->first;
-			}
 		}
 	}
 
 	// Iterate over the shapes of the IfcProduct
-	for ( IfcGeom::ShapeList::const_iterator it3 = entity_shapes.begin(); it3 != entity_shapes.end(); ++ it3 ) {
+	for ( IfcGeom::IfcRepresentationShapeItems::const_iterator it3 = entity_shapes.begin(); it3 != entity_shapes.end(); ++ it3 ) {
 		TopoDS_Shape entity_shape_solid;
-		const TopoDS_Shape& entity_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(*(it3->second),entity_shape_solid);
-		const gp_GTrsf& entity_shape_gtrsf = *(it3->first);
+		const TopoDS_Shape& entity_shape_unlocated = IfcGeom::ensure_fit_for_subtraction(it3->Shape(),entity_shape_solid);
+		const gp_GTrsf& entity_shape_gtrsf = it3->Placement();
 		TopoDS_Shape entity_shape;
 		if ( entity_shape_gtrsf.Form() == gp_Other ) {
 			Logger::Message(Logger::LOG_WARNING,"Applying non uniform transformation to:",entity->entity);
@@ -294,7 +295,7 @@ bool IfcGeom::convert_openings_fast(const Ifc2x3::IfcProduct::ptr entity, const 
 			BRepCheck_Analyzer analyser(brep_cut_result);
 			is_valid = analyser.IsValid() != 0;
 			if ( is_valid ) {
-				cut_shapes.push_back(IfcGeom::LocationShape(new gp_GTrsf(),new TopoDS_Shape(brep_cut_result)));
+				cut_shapes.push_back(IfcGeom::IfcRepresentationShapeItem(brep_cut_result, &it3->Style()));
 			}
 		}
 		if ( !is_valid ) {
@@ -338,15 +339,19 @@ bool IfcGeom::profile_helper(int numVerts, double* verts, int numFillets, int* f
 
 	IfcGeom::convert_wire_to_face(w.Wire(),face);
 
-	if ( numFillets ) {
+	if ( numFillets && *std::max_element(filletRadii, filletRadii + numFillets) > 1e-7 ) {
 		BRepFilletAPI_MakeFillet2d fillet (face);
 		for ( int i = 0; i < numFillets; i ++ ) {
 			const double radius = filletRadii[i];
-			if ( radius < 1e-7 ) continue;
+			if ( radius <= 1e-7 ) continue;
 			fillet.AddFillet(vertices[filletIndices[i]],radius);
 		}
 		fillet.Build();
-		face = TopoDS::Face(fillet.Shape());
+		if (fillet.IsDone()) {
+			face = TopoDS::Face(fillet.Shape());
+		} else {
+			Logger::Message(Logger::LOG_WARNING, "Failed to process profile fillets");
+		}
 	}
 
 	delete[] vertices;
@@ -431,6 +436,11 @@ gp_Pnt IfcGeom::point_above_plane(const gp_Pln& pln, bool agree) {
 	}
 }
 
+void IfcGeom::apply_tolerance(TopoDS_Shape& s, double t) {
+	ShapeFix_ShapeTolerance tol;
+	tol.SetTolerance(s, t);
+}
+
 static double deflection_tolerance = 0.001;
 static double wire_creation_tolerance = 0.0001;
 static double minimal_face_area = 0.000001;
@@ -439,6 +449,7 @@ static double max_faces_to_sew = -1.0;
 static double ifc_length_unit = 1.0;
 static double ifc_planeangle_unit = -1.0;
 static double force_ccw_face_orientation = -1.0;
+static double modelling_precision = 0.00001;
 
 void IfcGeom::SetValue(GeomValue var, double value) {
 	switch (var) {
@@ -466,6 +477,9 @@ void IfcGeom::SetValue(GeomValue var, double value) {
 	case GV_FORCE_CCW_FACE_ORIENTATION:
 		force_ccw_face_orientation = value;
 		break;
+	case GV_PRECISION:
+		modelling_precision = value;
+		break;
 	default:
 		assert(!"never reach here");
 	}
@@ -492,13 +506,16 @@ double IfcGeom::GetValue(GeomValue var) {
 	case GV_FORCE_CCW_FACE_ORIENTATION:
 		return force_ccw_face_orientation;
 		break;
+	case GV_PRECISION:
+		return modelling_precision;
+		break;
 	}
 	assert(!"never reach here");
 	return 0;
 }
 
 Ifc2x3::IfcProductDefinitionShape* IfcGeom::tesselate(TopoDS_Shape& shape, double deflection, IfcEntities es) {
-	BRepMesh::Mesh(shape, deflection);
+	BRepMesh_IncrementalMesh(shape, deflection);
 
 	Ifc2x3::IfcFace::list faces (new IfcTemplatedEntityList<Ifc2x3::IfcFace>());
 
@@ -511,7 +528,7 @@ Ifc2x3::IfcProductDefinitionShape* IfcGeom::tesselate(TopoDS_Shape& shape, doubl
 			const TColgp_Array1OfPnt& nodes = tri->Nodes();
 			std::vector<Ifc2x3::IfcCartesianPoint*> vertices;
 			for (int i = 1; i <= nodes.Length(); ++i) {
-				const gp_Pnt& pnt = nodes(i);
+				gp_Pnt pnt = nodes(i).Transformed(loc);
 				std::vector<double> xyz; xyz.push_back(pnt.X()); xyz.push_back(pnt.Y()); xyz.push_back(pnt.Z());
 				Ifc2x3::IfcCartesianPoint* cpnt = new Ifc2x3::IfcCartesianPoint(xyz);
 				vertices.push_back(cpnt);
@@ -559,4 +576,28 @@ Ifc2x3::IfcProductDefinitionShape* IfcGeom::tesselate(TopoDS_Shape& shape, doubl
 	es->push(shapedef);
 
 	return shapedef;
+}
+
+void IfcGeom::remove_redundant_points_from_loop(TColgp_SequenceOfPnt& polygon, bool closed, double tol) {
+	if (tol <= 0.) tol = GetValue(GV_POINT_EQUALITY_TOLERANCE);
+	tol *= tol;
+
+	while (true) {
+		bool removed = false;
+		int n = polygon.Length() - (closed ? 0 : 1);
+		for (int i = 1; i <= n; ++i) {
+			// wrap around to the first point in case of a closed loop
+			int j = (i % polygon.Length()) + 1;
+			double dist = polygon.Value(i).SquareDistance(polygon.Value(j));
+			if (dist < tol) {
+				// do not remove the first or last point to
+				// maintain connectivity with other wires
+				if ((closed && j == 1) || (!closed && j == n)) polygon.Remove(i);
+				else polygon.Remove(j);
+				removed = true;
+				break;
+			}
+		}
+		if (!removed) break;
+	}
 }

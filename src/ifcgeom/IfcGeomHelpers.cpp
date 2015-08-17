@@ -137,11 +137,10 @@ bool IfcGeom::convert(const Ifc2x3::IfcCartesianTransformationOperator3D::ptr l,
 	IfcGeom::convert(l->LocalOrigin(),origin);
 	gp_Dir axis1 (1.,0.,0.);
 	gp_Dir axis2 (0.,1.,0.);
-	gp_Dir axis3;
+	gp_Dir axis3 (0.,0.,1.);
 	if ( l->hasAxis1() ) IfcGeom::convert(l->Axis1(),axis1);
 	if ( l->hasAxis2() ) IfcGeom::convert(l->Axis2(),axis2);
 	if ( l->hasAxis3() ) IfcGeom::convert(l->Axis3(),axis3);
-	else axis3 = axis1.Crossed(axis2);
 	gp_Ax3 ax3 (origin,axis3,axis1);
 	if ( axis2.Dot(ax3.YDirection()) < 0 ) ax3.YReverse();
 	trsf.SetTransformation(ax3);
@@ -170,11 +169,10 @@ bool IfcGeom::convert(const Ifc2x3::IfcCartesianTransformationOperator3DnonUnifo
 	IfcGeom::convert(l->LocalOrigin(),origin);
 	gp_Dir axis1 (1.,0.,0.);
 	gp_Dir axis2 (0.,1.,0.);
-	gp_Dir axis3;
+	gp_Dir axis3 (0.,0.,1.);
 	if ( l->hasAxis1() ) IfcGeom::convert(l->Axis1(),axis1);
 	if ( l->hasAxis2() ) IfcGeom::convert(l->Axis2(),axis2);
 	if ( l->hasAxis3() ) IfcGeom::convert(l->Axis3(),axis3);
-	else axis3 = axis1.Crossed(axis2);
 	gp_Ax3 ax3 (origin,axis3,axis1);
 	if ( axis2.Dot(ax3.YDirection()) < 0 ) ax3.YReverse();
 	trsf.SetTransformation(ax3);
@@ -238,7 +236,10 @@ bool IfcGeom::convert(const Ifc2x3::IfcAxis2Placement2D::ptr l, gp_Trsf2d& trsf)
 }
 bool IfcGeom::convert(const Ifc2x3::IfcObjectPlacement::ptr l, gp_Trsf& trsf) {
 	IN_CACHE(IfcObjectPlacement,l,gp_Trsf,trsf)
-	if ( ! l->is(Ifc2x3::Type::IfcLocalPlacement) ) return false;
+	if ( ! l->is(Ifc2x3::Type::IfcLocalPlacement) ) {
+		Logger::Message(Logger::LOG_ERROR, "Unsupported IfcObjectPlacement:", l->entity);
+		return false; 		
+	}
 	Ifc2x3::IfcLocalPlacement::ptr current = reinterpret_pointer_cast<Ifc2x3::IfcObjectPlacement,Ifc2x3::IfcLocalPlacement>(l);
 	while (1) {
 		gp_Trsf trsf2;
