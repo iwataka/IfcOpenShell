@@ -49,23 +49,23 @@ JNIEXPORT jobject JNICALL Java_org_ifcopenshell_jni_Library_getIfcGeometry (JNIE
 
 	const IfcGeomObjects::IfcGeomObject* o = IfcGeomObjects::Get();
 
-	jstring name = env->NewStringUTF(o->name.c_str());
-	jstring type = env->NewStringUTF(o->type.c_str());
-	jstring guid = env->NewStringUTF(o->guid.c_str());
+	jstring name = env->NewStringUTF(o->name().c_str());
+	jstring type = env->NewStringUTF(o->type().c_str());
+	jstring guid = env->NewStringUTF(o->guid().c_str());
 
-	jintArray indices = env->NewIntArray(o->mesh->faces.size());
-	jfloatArray positions = env->NewFloatArray(o->mesh->verts.size());
-//	jfloatArray normals = env->NewFloatArray(o->mesh->normals.size());
-	jfloatArray matrix = env->NewFloatArray(o->matrix.size());
+	jintArray indices = env->NewIntArray(o->mesh().faces().size());
+	jfloatArray positions = env->NewFloatArray(o->mesh().verts().size());
+//	jfloatArray normals = env->NewFloatArray(o->mesh().normals().size());
+	jfloatArray matrix = env->NewFloatArray(o->matrix().size());
 
-	env->SetIntArrayRegion(indices,0,o->mesh->faces.size(),(jint*) &o->mesh->faces[0]);
-	env->SetFloatArrayRegion(positions,0,o->mesh->verts.size(),(jfloat*) &o->mesh->verts[0]);
-//	env->SetFloatArrayRegion(normals,0,o->mesh->normals.size(),(jfloat*) &o->mesh->normals[0]);
-	env->SetFloatArrayRegion(matrix,0,o->matrix.size(),(jfloat*) &o->matrix[0]);
+	env->SetIntArrayRegion(indices,0,o->mesh().faces().size(),(jint*) &o->mesh().faces()[0]);
+	env->SetFloatArrayRegion(positions,0,o->mesh().verts().size(),(jfloat*) &o->mesh().verts()[0]);
+//	env->SetFloatArrayRegion(normals,0,o->mesh().normals().size(),(jfloat*) &o->mesh().normals()[0]);
+	env->SetFloatArrayRegion(matrix,0,o->matrix().size(),(jfloat*) &o->matrix()[0]);
 
         jobject mesh_obj = env->NewObject(mesh_class_def, jconstructor_mesh, indices, positions);
 
-	jobject geom_obj = env->NewObject(geom_class_def, jconstructor_geom, o->id, o->parent_id, mesh_obj, matrix, type, guid, name);
+	jobject geom_obj = env->NewObject(geom_class_def, jconstructor_geom, o->id(), o->parent_id(), mesh_obj, matrix, type, guid, name);
 
 	env->DeleteLocalRef(name);
 	env->DeleteLocalRef(type);
@@ -129,15 +129,15 @@ jclass geom_class_def = env->FindClass ("org/ifcopenshell/model/IfcObject");
 	const IfcGeomObjects::IfcObject* o = IfcGeomObjects::GetObject(oid);
     if(o == NULL) return 0;
 
-	jstring name = env->NewStringUTF(o->name.c_str());
-	jstring type = env->NewStringUTF(o->type.c_str());
-	jstring guid = env->NewStringUTF(o->guid.c_str());
+	jstring name = env->NewStringUTF(o->name().c_str());
+	jstring type = env->NewStringUTF(o->type().c_str());
+	jstring guid = env->NewStringUTF(o->guid().c_str());
 
-	jfloatArray matrix = env->NewFloatArray(o->matrix.size());
+	jfloatArray matrix = env->NewFloatArray(o->matrix().size());
 
-	env->SetFloatArrayRegion(matrix,0,o->matrix.size(),(jfloat*) &o->matrix[0]);
+	env->SetFloatArrayRegion(matrix,0,o->matrix().size(),(jfloat*) &o->matrix()[0]);
 
-	jobject geom_obj = env->NewObject(geom_class_def, jconstructor_geom, o->id, o->parent_id, type, guid, name, matrix);
+	jobject geom_obj = env->NewObject(geom_class_def, jconstructor_geom, o->id(), o->parent_id(), type, guid, name, matrix);
 
 	env->DeleteLocalRef(name);
 	env->DeleteLocalRef(type);
