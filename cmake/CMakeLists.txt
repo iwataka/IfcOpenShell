@@ -6,7 +6,7 @@ MESSAGE(STATUS "Boost include files found in ${Boost_INCLUDE_DIRS}")
 MESSAGE(STATUS "Boost libraries found in ${Boost_LIBRARY_DIRS}")
 
 # Find Open CASCADE header files
-IF("$ENV{OCC_INCLUDE_DIR}" STREQUAL "") 
+IF("$ENV{OCC_INCLUDE_DIR}" STREQUAL "")
 	SET(OCC_INCLUDE_DIR "/usr/include/opencascade/" CACHE FILEPATH "Open CASCADE header files")
 	MESSAGE(STATUS "Looking for opencascade include files in: ${OCC_INCLUDE_DIR}")
 	MESSAGE(STATUS "Use OCC_INCLUDE_DIR to specify another directory")
@@ -23,7 +23,7 @@ ELSE()
 ENDIF()
 
 # Find Open CASCADE library files
-IF("$ENV{OCC_LIBRARY_DIR}" STREQUAL "") 
+IF("$ENV{OCC_LIBRARY_DIR}" STREQUAL "")
 	SET(OCC_LIBRARY_DIR "/usr/lib/" CACHE FILEPATH "Open CASCADE library files")
 	MESSAGE(STATUS "Looking for opencascade library files in: ${OCC_LIBRARY_DIR}")
 	MESSAGE(STATUS "Use OCC_LIBRARY_DIR to specify another directory")
@@ -57,7 +57,7 @@ IF(icu)
 	MESSAGE(STATUS "ICU libraries found")
     ADD_DEFINITIONS(-DHAVE_ICU)
 ELSE()
-	MESSAGE(STATUS "Unable to find ICU library files, continuing")	
+	MESSAGE(STATUS "Unable to find ICU library files, continuing")
 ENDIF()
 
 INCLUDE(CheckIncludeFileCXX)
@@ -74,12 +74,12 @@ ENDMACRO(CHECK_ADD_OCE_OCC_DEF)
 
 CHECK_ADD_OCE_OCC_DEF(limits)
 CHECK_ADD_OCE_OCC_DEF(climits)
-CHECK_ADD_OCE_OCC_DEF(limits.h)  
+CHECK_ADD_OCE_OCC_DEF(limits.h)
 CHECK_ADD_OCE_OCC_DEF(fstream)
 CHECK_ADD_OCE_OCC_DEF(fstream.h)
 CHECK_ADD_OCE_OCC_DEF(iomanip)
 CHECK_ADD_OCE_OCC_DEF(iomanip.h)
-CHECK_ADD_OCE_OCC_DEF(iostream)  
+CHECK_ADD_OCE_OCC_DEF(iostream)
 CHECK_ADD_OCE_OCC_DEF(iostream.h)
 
 IF(NOT CMAKE_BUILD_TYPE)
@@ -94,16 +94,14 @@ ENDIF(MSVC)
 
 INCLUDE_DIRECTORIES(${INCLUDE_DIRECTORIES} ${OCC_INCLUDE_DIR} /usr/inc /usr/local/inc /usr/local/include/oce ${ICU_INCLUDE_DIR} ${Boost_INCLUDE_DIRS})
 
-ADD_LIBRARY(IfcParse STATIC 
+ADD_LIBRARY(IfcParse STATIC
   ../src/ifcparse/Ifc2x3.cpp
-  ../src/ifcparse/IfcUtil.cpp
-  ../src/ifcparse/IfcParse.cpp
   ../src/ifcparse/IfcCharacterDecoder.cpp
-  
-  ../src/ifcparse/IfcWrite.cpp
   ../src/ifcparse/IfcGuidHelper.cpp
-  
-  ../src/ifcparse/IfcHierarchyHelper.cpp  
+  ../src/ifcparse/IfcHierarchyHelper.cpp
+  ../src/ifcparse/IfcParse.cpp
+  ../src/ifcparse/IfcUtil.cpp
+  ../src/ifcparse/IfcWrite.cpp
 )
 
 ADD_LIBRARY(IfcGeom STATIC
@@ -112,6 +110,7 @@ ADD_LIBRARY(IfcGeom STATIC
   ../src/ifcgeom/IfcGeomFunctions.cpp
   ../src/ifcgeom/IfcGeomHelpers.cpp
   ../src/ifcgeom/IfcGeomObjects.cpp
+  ../src/ifcgeom/IfcGeomRenderStyles.cpp
   ../src/ifcgeom/IfcGeomShapes.cpp
   ../src/ifcgeom/IfcGeomWires.cpp
   ../src/ifcgeom/IfcRegister.cpp
@@ -123,7 +122,7 @@ ENDIF()
 
 TARGET_LINK_LIBRARIES(IfcGeom IfcParse)
 
-LINK_DIRECTORIES (${LINK_DIRECTORIES} ${IfcOpenShell_BINARY_DIR} ${OCC_LIBRARY_DIR} /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 ${ICU_LIBRARY_DIR} ${Boost_LIBRARY_DIRS}) 
+LINK_DIRECTORIES (${LINK_DIRECTORIES} ${IfcOpenShell_BINARY_DIR} ${OCC_LIBRARY_DIR} /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64 ${ICU_LIBRARY_DIR} ${Boost_LIBRARY_DIRS})
 
 #ADD_EXECUTABLE(IfcObj ../src/ifcobj/IfcObj.cpp)
 
@@ -144,6 +143,8 @@ SET(include_files_geom
     ../src/ifcgeom/IfcGeom.h
     ../src/ifcgeom/IfcGeomObjects.h
     ../src/ifcgeom/IfcRegister.h
+    ../src/ifcgeom/IfcGeomRenderStyles.h
+    ../src/ifcgeom/IfcRegister.h
     ../src/ifcgeom/IfcRegisterConvertCurve.h
     ../src/ifcgeom/IfcRegisterConvertFace.h
     ../src/ifcgeom/IfcRegisterConvertShape.h
@@ -155,7 +156,7 @@ SET(include_files_geom
     ../src/ifcgeom/IfcRegisterIsShapeCollection.h
     ../src/ifcgeom/IfcRegisterPurgeCache.h
     ../src/ifcgeom/IfcRegisterUndef.h
-    ../src/ifcgeom/IfcShapeList.h
+    ../src/ifcgeom/IfcRepresentationShapeItem.h
 )
 SET(include_files_parse
     ../src/ifcparse/Ifc2x3.h
@@ -166,10 +167,9 @@ SET(include_files_parse
     ../src/ifcparse/IfcHierarchyHelper.h
     ../src/ifcparse/IfcParse.h
     ../src/ifcparse/IfcUtil.h
-    ../src/ifcparse/SharedPointer.h
-    
-    ../src/ifcparse/IfcWrite.h
     ../src/ifcparse/IfcWritableEntity.h
+    ../src/ifcparse/IfcWrite.h
+    ../src/ifcparse/SharedPointer.h
 )
 INSTALL(FILES ${include_files_geom} DESTINATION include/ifcgeom)
 INSTALL(FILES ${include_files_parse} DESTINATION include/ifcparse)
