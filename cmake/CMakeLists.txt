@@ -39,6 +39,41 @@ ELSE()
   MESSAGE(FATAL_ERROR "Unable to find library files, aborting")
 ENDIF()
 
+# Find IfcParse header files
+IF("$ENV{IFCPARSE_INCLUDE_DIR}" STREQUAL "")
+  SET(IFCPARSE_INCLUDE_DIR "/usr/local/include/ifcparse/" CACHE FILEPATH "IfcParse header files")
+  MESSAGE(STATUS "Looking for ifcparse include files in: ${IFCPARSE_INCLUDE_DIR}")
+  MESSAGE(STATUS "Use IFCPARSE_INCLUDE_DIR to specify another directory")
+ElSE()
+  SET(IFCPARSE_INCLUDE_DIR $ENV{IFCPARSE_INCLUDE_DIR} CACHE FILEPATH "IfcParse header files")
+  MESSAGE(STATUS "Looking for ifcparse include files in: ${IFCPARSE_INCLUDE_DIR}")
+ENDIF()
+
+FIND_FILE(Ifc2x3_h "Ifc2x3.h" ${IFCPARSE_INCLUDE_DIR} /usr/inc /usr/local/inc)
+
+IF(Ifc2x3_h)
+  MESSAGE(STATUS "Header files found")
+ElSE()
+  MESSAGE(FATAL_ERROR "Unable to find header files, aborting")
+ENDIF()
+
+# Find IfcParse library files
+IF("$ENV{IFCPARSE_LIBRARY_DIR}" STREQUAL "")
+  SET(IFCPARSE_LIBRARY_DIR "/usr/lib/" CACHE FILEPATH "IfcParse library files")
+  MESSAGE(STATUS "Looking for ifcparse library files in: ${IFCPARSE_LIBRARY_DIR}")
+  MESSAGE(STATUS "Use IFCPARSE_LIBRARY_DIR to specify another directory")
+ElSE()
+  SET(IFCPARSE_LIBRARY_DIR $ENV{IFCPARSE_LIBRARY_DIR} CACHE FILEPATH "IfcParse library files")
+  MESSAGE(STATUS "Looking for ifcparse library files in: ${IFCPARSE_LIBRARY_DIR}")
+ENDIF()
+
+FIND_LIBRARY(libIfcParse "IfcParse" ${IFCPARSE_LIBRARY_DIR} /usr/lib /usr/lib64 /usr/local/lib /usr/local/lib64)
+IF(libIfcParse)
+  MESSAGE(STATUS "Library files found")
+ElSE()
+  MESSAGE(FATAL_ERROR "Unable to find library files, aborting")
+ENDIF()
+
 IF("$ENV{ICU_INCLUDE_DIR}" STREQUAL "")
   MESSAGE(STATUS "No ICU include directory specified")
 ElSE()
