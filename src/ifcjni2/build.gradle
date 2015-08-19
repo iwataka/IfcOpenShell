@@ -1,0 +1,10 @@
+apply plugin: 'java'
+apply plugin: 'application'
+
+mainClassName = "org.ifcopenshell.process.ProcessIfcFile"
+
+dependencies {
+    compile fileTree(dir: 'lib', include: ['*.jar'])
+    compile fileTree(dir: 'lib', include: ['*.so'])
+    compile fileTree(dir: 'lib', include: ['*.o'])
+}
