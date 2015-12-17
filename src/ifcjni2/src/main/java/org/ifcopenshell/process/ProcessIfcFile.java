@@ -203,7 +203,14 @@ public class ProcessIfcFile {
 	}
 
 	public static void main(String[] args) throws Exception {
-		ProcessIfcFile ifcFile = new ProcessIfcFile("lib/libifcjni2.so");
+		String os = System.getProperty("os.name");
+		String libPath = "";
+		if (os.startsWith("Windows")) {
+			libPath = "lib/ifcjni2.dll";
+		} else {
+			libPath = "lib/libifcjni2.so";
+		}
+		ProcessIfcFile ifcFile = new ProcessIfcFile(libPath);
 		long t = System.currentTimeMillis();
 		System.out.println("Parsing File...");
 		ifcFile.parse("files/IFC.ifc");

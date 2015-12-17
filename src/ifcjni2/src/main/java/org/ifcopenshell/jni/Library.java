@@ -9,10 +9,11 @@ public class Library {
 
 	public Library(String libPath) throws Exception{
 		File file = new File(libPath);
+		String absPath = file.getAbsolutePath();
 		if (file.exists()) {
-			System.load(file.getAbsolutePath());
+			System.load(absPath);
 		}else{
-			throw new Exception("Path not Found");
+			throw new Exception("Path not Found: " + absPath);
 		}
 	}
 
